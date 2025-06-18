@@ -136,3 +136,128 @@ ORDER BY
     2 DESC
 LIMIT 
     3;
+
+    -- Cleaning up product names and calculating refund rates for each product
+WITH refunds_cte AS (
+    SELECT 
+        CASE 
+            WHEN product_name ='27in"" 4k gaming monitor' THEN '27in 4K gaming monitor' 
+            ELSE product_name 
+        END AS product_name_clean,
+        COUNT(order_status.refund_ts) AS refunds,
+        ROUND(COUNT(order_status.refund_ts) / COUNT(DISTINCT orders.id), 3) AS refund_rate
+    FROM 
+        elist.orders AS orders
+    LEFT JOIN 
+        elist.order_status AS order_status 
+    ON 
+        orders.id = order_status.order_id
+    GROUP BY 
+        1
+)
+-- Highlighting the 3 products with the highest count of total refunds
+SELECT 
+    product_name_clean, 
+    refunds
+FROM 
+    refunds_cte
+ORDER BY 
+    2 DESC
+LIMIT 
+    3;
+
+-- Finding AOV and new customers by account_creation_method for accounts created in the first 2 months of 2022 
+WITH account_creation_method_cte AS (
+    SELECT 
+        customers.account_creation_method AS account_creation_method, 
+        ROUND(AVG(usd_price), 2) AS aov, 
+        COUNT(DISTINCT customers.id) AS new_customers
+    FROM 
+        elist.customers AS customers
+    INNER JOIN 
+        elist.orders AS orders 
+    ON 
+        customers.id = orders.customer_id
+    WHERE 
+        EXTRACT(YEAR FROM customers.created_on) = 2022 AND EXTRACT(MONTH FROM customers.created_on) IN (1, 2)
+    GROUP BY 
+        1
+)
+-- Comparing AOV for each account creation method
+SELECT 
+    account_creation_method, 
+    aov
+FROM 
+    account_creation_method_cte
+ORDER BY 
+    2 DESC;
+
+-- Finding AOV and new customers by account_creation_method for accounts created in the first 2 months of 2022 
+WITH account_creation_method_cte AS (
+    SELECT 
+        customers.account_creation_method AS account_creation_method, 
+        ROUND(AVG(usd_price), 2) AS aov, 
+        COUNT(DISTINCT customers.id) AS new_customers
+    FROM 
+        elist.customers AS customers
+    INNER JOIN 
+        elist.orders AS orders 
+    ON 
+        customers.id = orders.customer_id
+    WHERE 
+        EXTRACT(YEAR FROM customers.created_on) = 2022 AND EXTRACT(MONTH FROM customers.created_on) IN (1, 2)
+    GROUP BY 
+        1
+)
+-- Comparing total new customers for each account creation method
+SELECT 
+    account_creation_method, 
+    new_customers
+FROM 
+    account_creation_method_cte
+ORDER BY 
+    new_customers DESC;
+
+/*
+Avg amount of time between customer registration and initial purchase
+Averaging the amount of days to purchase for all customers
+*/
+WITH initial_order_cte AS (
+    SELECT 
+        orders.customer_id AS customer_id, 
+        MIN(purchase_ts) AS initial_order
+    FROM 
+        elist.orders AS orders
+    GROUP BY 
+        1 
+)
+SELECT 
+    ROUND(AVG(DATE_DIFF(initial_order_cte.initial_order, customers.created_on, DAY)), 2) AS days_to_purchase
+FROM 
+    elist.customers AS customers
+INNER JOIN 
+    initial_order_cte 
+ON 
+    customers.id = initial_order_cte.customer_id;
+
+/*
+Avg time between customer registration and all orders made by customers
+Averaging the amount of days to purchase for all customers
+*/
+WITH time_to_order_cte AS (
+    SELECT 
+        orders.customer_id, 
+        orders.purchase_ts,
+        customers.created_on,
+        DATE_DIFF(orders.purchase_ts, customers.created_on, DAY) AS days_to_purchase
+    FROM 
+        elist.customers AS customers
+    LEFT JOIN 
+        elist.orders AS orders 
+    ON 
+        customers.id = orders.customer_id
+)
+SELECT 
+    ROUND(AVG(days_to_purchase), 1) AS avg_days_to_purchase
+FROM 
+    time_to_order_cte;
