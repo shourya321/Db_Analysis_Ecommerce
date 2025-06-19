@@ -261,3 +261,194 @@ SELECT
     ROUND(AVG(days_to_purchase), 1) AS avg_days_to_purchase
 FROM 
     time_to_order_cte;
+
+/*
+Calculating total sales, AOV, and total orders per region to determine which marketing channel performs best
+Ranking channels by total sales, AOV, and total orders since what performs best depends on the metric you're trying to maximize for
+*/
+WITH top_marketing_channel_cte AS (
+    SELECT 
+        geo_lookup.region AS region,
+        customers.marketing_channel AS marketing_channel, 
+        SUM(orders.usd_price) AS total_sales,
+        AVG(orders.usd_price) AS aov,
+        COUNT(DISTINCT orders.id) AS total_orders,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY SUM(orders.usd_price) DESC) AS total_sales_rank,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY AVG(orders.usd_price) DESC) AS aov_rank,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY COUNT(DISTINCT orders.id) DESC) AS total_orders_rank
+    FROM 
+        elist.customers AS customers
+    JOIN 
+        elist.orders AS orders 
+    ON 
+        customers.id = orders.customer_id
+    JOIN 
+        elist.geo_lookup AS geo_lookup 
+    ON 
+        customers.country_code = geo_lookup.country
+    GROUP BY 
+        1, 2
+)
+/*
+Finding out which marketing channel performs best in terms of total sales
+Note since the top ranking is direct, which isn't a marketing channel, in this instance you're better off looking for what's ranked #2
+*/
+SELECT 
+    region,
+    marketing_channel,
+    ROUND(total_sales, 2) AS total_sales,
+    ROUND(aov, 2) AS aov,
+    total_orders
+FROM 
+    top_marketing_channel_cte
+WHERE 
+    total_sales_rank = 1
+ORDER BY 
+    3 DESC;
+
+/*
+Calculating total sales, AOV, and total orders per region to determine which marketing channel performs best
+Ranking channels by total sales, AOV, and total orders since what performs best depends on the metric you're trying to maximize for
+*/
+WITH top_marketing_channel_cte AS (
+    SELECT
+        geo_lookup.region AS region,
+        customers.marketing_channel AS marketing_channel, 
+        ROUND(SUM(orders.usd_price), 2) AS total_sales,
+        ROUND(AVG(orders.usd_price), 2) AS aov,
+        COUNT(DISTINCT orders.id) AS total_orders,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY SUM(orders.usd_price) DESC) AS total_sales_rank,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY AVG(orders.usd_price) DESC) AS aov_rank,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY COUNT(DISTINCT orders.id) DESC) AS total_orders_rank
+    FROM 
+        elist.customers AS customers
+    JOIN 
+        elist.orders AS orders 
+    ON 
+        customers.id = orders.customer_id
+    JOIN 
+        elist.geo_lookup AS geo_lookup 
+    ON 
+        customers.country_code = geo_lookup.country
+    GROUP BY 
+        1, 2
+)
+-- Finding out which marketing channel performs best in terms of AOV
+SELECT 
+    region, 
+    marketing_channel, 
+    aov 
+FROM 
+    top_marketing_channel_cte
+WHERE 
+    aov_rank = 1
+ORDER BY 
+    3 DESC;
+
+/*
+Calculating total sales, AOV, and total orders per region to determine which marketing channel performs best
+Ranking channels by total sales, AOV, and total orders since what performs best depends on the metric you're trying to maximize for
+*/
+WITH top_marketing_channel_cte AS (
+    SELECT
+        geo_lookup.region AS region,
+        customers.marketing_channel AS marketing_channel, 
+        ROUND(SUM(orders.usd_price), 2) AS total_sales,
+        ROUND(AVG(orders.usd_price), 2) AS aov,
+        COUNT(DISTINCT orders.id) AS total_orders,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY SUM(orders.usd_price) DESC) AS total_sales_rank,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY AVG(orders.usd_price) DESC) AS aov_rank,
+        ROW_NUMBER() OVER (PARTITION BY geo_lookup.region ORDER BY COUNT(DISTINCT orders.id) DESC) AS total_orders_rank
+    FROM 
+        elist.customers AS customers
+    JOIN 
+        elist.orders AS orders 
+    ON 
+        customers.id = orders.customer_id
+    JOIN 
+        elist.geo_lookup AS geo_lookup 
+    ON 
+        customers.country_code = geo_lookup.country
+    GROUP BY 
+        1, 2
+)
+/*
+Finding which marketing channel performs best in terms of total orders
+Note since the top ranking is direct, which isn't a marketing channel, in this instance you're better off looking for what's ranked #2
+*/
+SELECT 
+    region, 
+    marketing_channel, 
+    total_orders  
+FROM 
+    top_marketing_channel_cte
+WHERE 
+    total_orders_rank = 1
+ORDER BY 
+    3 DESC;
+
+-- Looking for customers with more than 4 purchases
+WITH loyal_customers_cte AS (
+    SELECT
+        orders.customer_id AS customer_id, 
+        COUNT(DISTINCT orders.id) AS total_orders
+    FROM 
+        elist.orders AS orders 
+    GROUP BY 
+        1
+    HAVING 
+        COUNT(DISTINCT orders.id) > 4
+)
+-- To see the most recent order of loyal customers, doing a join with loyal_customers_cte
+SELECT
+    orders.customer_id AS customer_id, 
+    orders.id AS order_id, 
+    orders.product_name AS product_name, 
+    DATE(orders.purchase_ts) AS purchase_date,
+    ROW_NUMBER() OVER (PARTITION BY orders.customer_id ORDER BY orders.purchase_ts DESC) AS rank
+FROM 
+    elist.orders AS orders
+JOIN 
+    loyal_customers_cte AS loyal_customers 
+ON 
+    orders.customer_id = loyal_customers.customer_id
+WHERE 
+    rank = 1;
+
+/*
+Creating a brand category and totaling the amount of refunds per month
+Filtering to the year 2020
+*/
+WITH highest_num_refunds_cte AS (
+    SELECT
+        CASE
+            WHEN LOWER(orders.product_name) LIKE '%apple%' OR LOWER(orders.product_name) LIKE '%macbook%' THEN 'Apple'
+            WHEN LOWER(orders.product_name) LIKE '%samsung%' THEN 'Samsung'
+            WHEN LOWER(orders.product_name) LIKE '%thinkpad%' THEN 'ThinkPad'
+            WHEN LOWER(orders.product_name) LIKE '%bose%' THEN 'Bose'
+            ELSE 'Unknown'
+        END AS brand,
+        DATE_TRUNC(order_status.refund_ts, MONTH) AS month,
+        COUNT(order_status.refund_ts) AS num_refunds
+    FROM 
+        elist.orders AS orders 
+    JOIN 
+        elist.order_status AS order_status 
+    ON 
+        orders.id = order_status.order_id
+    WHERE 
+        EXTRACT(YEAR FROM order_status.refund_ts) = 2020
+    GROUP BY 
+        1, 2
+)
+-- Getting the highest month and corresponding number of refunds for each brand in 2020 
+SELECT
+    brand, 
+    month, 
+    num_refunds
+FROM 
+    highest_num_refunds_cte
+QUALIFY 
+    ROW_NUMBER() OVER (PARTITION BY brand ORDER BY num_refunds DESC) = 1
+ORDER BY 
+    1;
