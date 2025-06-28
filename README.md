@@ -15,7 +15,7 @@ Analyzing Elist order trends from 2019-2022. An interactive Tableau dashboard ca
 
 <a id='section_1'></a>
 # Project Summary
-Elist is a sample e-commerce company that sells popular electronics to customers around the world.
+Elist is a demo e-commerce platform specializing in global sales of trending electronic gadgets.
 
 In this project, I analyzed a dataset to investigate trends and growth rates in revenue, average order value (AOV), product popularity, marketing channels, refund rates, and shipping efficiency. Additionally, I closely examined their recently launched loyalty program to assess its effectiveness in overall sales, AOV, and total orders.
 
